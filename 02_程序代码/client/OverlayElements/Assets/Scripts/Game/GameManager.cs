@@ -183,7 +183,7 @@ namespace OverlayElements.Game
         {
             if (turnManager != null)
             {
-                turnManager.OnTurnStart += HandleTurnStart;
+                turnManager.OnPhaseChanged += HandleTurnStart;
                 turnManager.OnTurnEnd += HandleTurnEnd;
             }
 
@@ -343,7 +343,7 @@ namespace OverlayElements.Game
         {
             if (turnManager != null)
             {
-                turnManager.OnTurnStart -= HandleTurnStart;
+                turnManager.OnPhaseChanged -= HandleTurnStart;
                 turnManager.OnTurnEnd -= HandleTurnEnd;
             }
         }

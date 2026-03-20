@@ -184,9 +184,10 @@ namespace OverlayElements.UI
         {
             UpdateUI();
             
+            string winnerName = winner == gameManager.Player ? "YOU WIN!" : "YOU LOSE!";
+            
             if (turnIndicatorText != null)
             {
-                string winnerName = winner == gameManager.Player ? "YOU WIN!" : "YOU LOSE!";
                 turnIndicatorText.text = winnerName;
             }
 
