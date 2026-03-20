@@ -127,7 +127,7 @@ namespace OverlayElements.Game
         /// </summary>
         public bool PlayCard(CardInstance card)
         {
-            if (card == null || !deck.Hand.Contains(card)) return false;
+            if (card == null || deck.Hand == null || !deck.Hand.Any(c => c == card)) return false;
             if (!SpendEnergy(card.Cost)) return false;
             
             if (deck.PlayCard(card))

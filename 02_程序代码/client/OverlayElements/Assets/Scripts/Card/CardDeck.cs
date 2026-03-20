@@ -114,7 +114,7 @@ namespace OverlayElements.Card
         /// </summary>
         public bool PlayCard(CardInstance card)
         {
-            if (card == null || !hand.Contains(card)) return false;
+            if (card == null || !hand.Any(c => c == card)) return false;
             if (field.Count >= 5) return false; // Max 5 cards on field
             
             hand.Remove(card);
@@ -128,7 +128,7 @@ namespace OverlayElements.Card
         /// </summary>
         public void SendToGrave(CardInstance card)
         {
-            if (field.Contains(card))
+            if (field.Any(c => c == card))
             {
                 field.Remove(card);
                 card.Zone = CardZone.Grave;

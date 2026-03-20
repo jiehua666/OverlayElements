@@ -60,13 +60,13 @@ namespace OverlayElements.Game
         /// </summary>
         public void RemoveCard(CardInstance card)
         {
-            if (playerField.Contains(card))
+            if (playerField.Any(c => c == card))
             {
                 playerField.Remove(card);
                 card.Zone = CardZone.Grave;
                 OnCardRemoved?.Invoke(card);
             }
-            else if (opponentField.Contains(card))
+            else if (opponentField.Any(c => c == card))
             {
                 opponentField.Remove(card);
                 card.Zone = CardZone.Grave;

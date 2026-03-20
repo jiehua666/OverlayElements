@@ -159,7 +159,7 @@ namespace OverlayElements.Game
         public List<CardInstance> GetValidTargets(CardInstance attacker)
         {
             var targets = new List<CardInstance>();
-            bool isPlayer = board.PlayerField.Contains(attacker);
+            bool isPlayer = board.PlayerField.Any(c => c == attacker);
 
             var enemyField = isPlayer ? board.OpponentField : board.PlayerField;
             
