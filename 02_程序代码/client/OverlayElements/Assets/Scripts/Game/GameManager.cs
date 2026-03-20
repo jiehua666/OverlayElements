@@ -1,4 +1,4 @@
-// Game Manager - Main game state controller
+// Game Manager - Main game state and flow controller
 // Version: 0.1.0
 // Created: 2026-03-20
 
@@ -6,135 +6,206 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using OverlayElements.Card;
+using OverlayElements.UI;
 
 namespace OverlayElements.Game
 {
     /// <summary>
-    /// Main game manager singleton
+    /// Game state enumeration
+    /// </summary>
+    public enum GameState
+    {
+        NotStarted,
+        PlayerTurn,
+        OpponentTurn,
+        Animating,
+        GameOver
+    }
+
+    /// <summary>
+    /// Main game manager
     /// </summary>
     public class GameManager : MonoBehaviour
     {
-        public static GameManager Instance { get; private set; }
-
         [Header("Game Settings")]
         [SerializeField] private int initialHandSize = 5;
         [SerializeField] private int maxFieldCards = 5;
-        [SerializeField] private int maxDeckSize = 40;
-        [SerializeField] private int startingHealth = 30;
-        [SerializeField] private int startingEnergy = 3;
+        [SerializeField] private int playerStartingHealth = 30;
+        [SerializeField] private int opponentStartingHealth = 30;
 
-        [Header("References")]
+        [Header("Game References")]
         [SerializeField] private CardDatabase cardDatabase;
-        
+        [SerializeField] private GameHUD gameHUD;
+
+        [Header("Test Mode")]
+        [SerializeField] private bool useTestDeck = true;
+
         // Game state
-        private GameState gameState;
+        private GameState currentState = GameState.NotStarted;
+        private Player player;
+        private Player opponent;
+        private GameBoard board;
         private TurnManager turnManager;
-        private List<Player> players = new List<Player>();
-        private int currentPlayerIndex;
-        private int turnNumber;
+        private CombatManager combatManager;
+        private AIController aiController;
+
+        // References
+        private CardAnimationController animationController;
 
         // Events
         public event Action<GameState> OnGameStateChanged;
-        public event Action<int> OnTurnStarted;
-        public event Action<Player> OnPlayerWon;
-        public event Action OnGameOver;
+        public event Action<Player> OnGameOver;
 
-        public GameState CurrentState => gameState;
+        // Properties
+        public GameState CurrentState => currentState;
+        public Player Player => player;
+        public Player Opponent => opponent;
+        public GameBoard Board => board;
         public TurnManager TurnManager => turnManager;
-        public Player CurrentPlayer => players[currentPlayerIndex];
-        public Player OpponentPlayer => players[1 - currentPlayerIndex];
-        public int TurnNumber => turnNumber;
-        public CardDatabase CardDatabase => cardDatabase;
+        public CombatManager Combat => combatManager;
 
         private void Awake()
         {
-            if (Instance != null && Instance != this)
+            animationController = GetComponent<CardAnimationController>();
+            if (animationController == null)
             {
-                Destroy(gameObject);
-                return;
+                animationController = gameObject.AddComponent<CardAnimationController>();
             }
-            Instance = this;
         }
 
         private void Start()
         {
-            turnManager = new TurnManager();
+            // Initialize game systems
+            InitializeGameSystems();
+
+            // Initialize players
+            InitializePlayers();
+
+            // Subscribe to events
+            SubscribeToEvents();
+
+            // Start the game
+            StartGame();
         }
 
         /// <summary>
-        /// Start a new game
+        /// Initialize game systems
+        /// </summary>
+        private void InitializeGameSystems()
+        {
+            board = new GameBoard();
+            turnManager = new TurnManager();
+            combatManager = new CombatManager(board, turnManager);
+            aiController = new AIController(combatManager, board);
+        }
+
+        /// <summary>
+        /// Initialize players
+        /// </summary>
+        private void InitializePlayers()
+        {
+            player = new Player("Player", playerStartingHealth, 3);
+            opponent = new Player("Opponent", opponentStartingHealth, 3);
+
+            // Create decks
+            if (useTestDeck && cardDatabase != null)
+            {
+                CreateTestDecks();
+            }
+            else
+            {
+                CreateDefaultDeck(player);
+                CreateDefaultDeck(opponent);
+            }
+
+            // Initialize decks
+            player.Deck.Initialize();
+            opponent.Deck.Initialize();
+
+            Debug.Log($"[GameManager] Players initialized. Player Health: {player.Health}, Opponent Health: {opponent.Health}");
+        }
+
+        /// <summary>
+        /// Create test decks with available cards
+        /// </summary>
+        private void CreateTestDecks()
+        {
+            var allCards = cardDatabase.GetAllCards();
+            var playerCards = new List<CardData>();
+            var opponentCards = new List<CardData>();
+
+            foreach (var card in allCards)
+            {
+                // Each player gets 2 copies of each card
+                playerCards.Add(card);
+                playerCards.Add(card);
+                opponentCards.Add(card);
+                opponentCards.Add(card);
+            }
+
+            var playerDeck = new CardDeck("Player Deck");
+            playerDeck.SetMainDeck(playerCards);
+            player.SetDeck(playerDeck);
+
+            var opponentDeck = new CardDeck("Opponent Deck");
+            opponentDeck.SetMainDeck(opponentCards);
+            opponent.SetDeck(opponentDeck);
+        }
+
+        /// <summary>
+        /// Create default deck
+        /// </summary>
+        private void CreateDefaultDeck(Player p)
+        {
+            var deck = new CardDeck(p.Name + " Deck");
+            var cards = new List<CardData>();
+
+            // Add default cards
+            for (int i = 0; i < 4; i++)
+            {
+                cards.Add(cardDatabase.GetCardById("FIRE_001"));
+                cards.Add(cardDatabase.GetCardById("WATER_001"));
+                cards.Add(cardDatabase.GetCardById("WIND_001"));
+                cards.Add(cardDatabase.GetCardById("WOOD_001"));
+            }
+
+            deck.SetMainDeck(cards);
+            p.SetDeck(deck);
+        }
+
+        /// <summary>
+        /// Subscribe to game events
+        /// </summary>
+        private void SubscribeToEvents()
+        {
+            if (turnManager != null)
+            {
+                turnManager.OnTurnStart += HandleTurnStart;
+                turnManager.OnTurnEnd += HandleTurnEnd;
+            }
+
+            if (combatManager != null)
+            {
+                combatManager.OnCardDestroyed += HandleCardDestroyed;
+            }
+        }
+
+        /// <summary>
+        /// Start the game
         /// </summary>
         public void StartGame()
         {
-            Debug.Log("[GameManager] Starting new game...");
-            
-            // Initialize players
-            players.Clear();
-            players.Add(new Player("Player 1", startingHealth, startingEnergy));
-            players.Add(new Player("Player 2 (AI)", startingHealth, startingEnergy));
-            
-            // Initialize decks
-            foreach (var player in players)
-            {
-                var deck = new CardDeck(player.Name);
-                if (cardDatabase != null)
-                {
-                    deck.SetMainDeck(cardDatabase.CreateRandomDeck(maxDeckSize));
-                }
-                deck.Initialize();
-                player.SetDeck(deck);
-            }
-            
-            currentPlayerIndex = 0;
-            turnNumber = 0;
-            
-            SetGameState(GameState.Starting);
-            SetGameState(GameState.PlayerTurn);
-            
-            Debug.Log("[GameManager] Game started!");
-        }
+            Debug.Log("[GameManager] Game Starting...");
 
-        /// <summary>
-        /// End current player's turn
-        /// </summary>
-        public void EndTurn()
-        {
-            if (gameState != GameState.PlayerTurn) return;
-            
-            Debug.Log($"[GameManager] Player {CurrentPlayer.Name} ends turn");
-            
-            // End turn effects
-            CurrentPlayer.OnTurnEnd();
-            
-            // Switch player
-            currentPlayerIndex = 1 - currentPlayerIndex;
-            turnNumber++;
-            
-            // Start new turn
-            SetGameState(GameState.EndingTurn);
-            SetGameState(GameState.PlayerTurn);
-            
-            OpponentPlayer.OnTurnStart();
-            OnTurnStarted?.Invoke(currentPlayerIndex);
-        }
+            // Initial draw
+            player.DrawCards(initialHandSize);
+            opponent.DrawCards(initialHandSize);
 
-        /// <summary>
-        /// Check win/lose conditions
-        /// </summary>
-        public void CheckGameOver()
-        {
-            foreach (var player in players)
-            {
-                if (player.Health <= 0)
-                {
-                    var winner = players.Find(p => p != player);
-                    OnGameOver?.Invoke();
-                    OnPlayerWon?.Invoke(winner);
-                    SetGameState(GameState.GameOver);
-                    Debug.Log($"[GameManager] Game Over! Winner: {winner.Name}");
-                    return;
-                }
-            }
+            // Start first turn
+            turnManager.StartGame();
+            SetGameState(GameState.PlayerTurn);
+
+            Debug.Log("[GameManager] Game Started!");
         }
 
         /// <summary>
@@ -142,45 +213,126 @@ namespace OverlayElements.Game
         /// </summary>
         public void SetGameState(GameState newState)
         {
-            if (gameState == newState) return;
-            
-            Debug.Log($"[GameManager] State: {gameState} → {newState}");
-            gameState = newState;
+            if (currentState == newState) return;
+
+            Debug.Log($"[GameManager] State: {currentState} -> {newState}");
+            currentState = newState;
             OnGameStateChanged?.Invoke(newState);
         }
 
         /// <summary>
-        /// Get player by index
+        /// Handle turn start
         /// </summary>
-        public Player GetPlayer(int index)
+        private void HandleTurnStart(bool isPlayerTurn)
         {
-            return index >= 0 && index < players.Count ? players[index] : null;
+            if (isPlayerTurn)
+            {
+                SetGameState(GameState.PlayerTurn);
+                player.OnTurnStart();
+            }
+            else
+            {
+                SetGameState(GameState.OpponentTurn);
+                opponent.OnTurnStart();
+
+                // Trigger AI
+                StartCoroutine(AITurnCoroutine());
+            }
         }
 
         /// <summary>
-        /// Quit game
+        /// AI turn coroutine
         /// </summary>
-        public void QuitGame()
+        private System.Collections.IEnumerator AITurnCoroutine()
         {
-            Debug.Log("[GameManager] Quitting game...");
-            Application.Quit();
-#if UNITY_EDITOR
-            UnityEditor.EditorApplication.isPlaying = false;
-#endif
-        }
-    }
+            yield return new WaitForSeconds(1f);
 
-    /// <summary>
-    /// Game state machine
-    /// </summary>
-    public enum GameState
-    {
-        Idle,           // Initial state
-        Starting,        // Game is starting
-        PlayerTurn,      // Active player's turn
-        EnemyTurn,       // AI turn
-        EndingTurn,      // Turn ending animation
-        Paused,         // Game paused
-        GameOver        // Game ended
+            while (currentState == GameState.OpponentTurn && !aiController.IsTurnComplete())
+            {
+                aiController.TakeTurn(opponent, player);
+                yield return new WaitForSeconds(0.5f);
+            }
+
+            // End AI turn
+            EndTurn();
+        }
+
+        /// <summary>
+        /// Handle turn end
+        /// </summary>
+        private void HandleTurnEnd(bool isPlayerTurn)
+        {
+            if (isPlayerTurn)
+            {
+                player.OnTurnEnd();
+            }
+            else
+            {
+                opponent.OnTurnEnd();
+            }
+        }
+
+        /// <summary>
+        /// End current turn
+        /// </summary>
+        public void EndTurn()
+        {
+            if (currentState != GameState.PlayerTurn) return;
+
+            Debug.Log("[GameManager] Player ending turn...");
+            SetGameState(GameState.Animating);
+            turnManager.EndTurn();
+        }
+
+        /// <summary>
+        /// Handle card destroyed
+        /// </summary>
+        private void HandleCardDestroyed(CardInstance card, int position)
+        {
+            Debug.Log($"[GameManager] Card destroyed: {card.CardName}");
+
+            // Check win/lose conditions
+            CheckGameOver();
+        }
+
+        /// <summary>
+        /// Check game over conditions
+        /// </summary>
+        public void CheckGameOver()
+        {
+            if (!player.IsAlive)
+            {
+                SetGameState(GameState.GameOver);
+                OnGameOver?.Invoke(opponent);
+                Debug.Log("[GameManager] GAME OVER - Opponent Wins!");
+            }
+            else if (!opponent.IsAlive)
+            {
+                SetGameState(GameState.GameOver);
+                OnGameOver?.Invoke(player);
+                Debug.Log("[GameManager] GAME OVER - Player Wins!");
+            }
+        }
+
+        /// <summary>
+        /// Get current game info for UI
+        /// </summary>
+        public string GetGameInfo()
+        {
+            return $"State: {currentState}\n" +
+                   $"Player HP: {player.Health}/{player.MaxHealth} | Energy: {player.Energy}/{player.MaxEnergy}\n" +
+                   $"Opponent HP: {opponent.Health}/{opponent.MaxHealth}\n" +
+                   $"Player Hand: {player.Deck.HandCount} | Field: {player.Deck.FieldCount}\n" +
+                   $"Opponent Hand: {opponent.Deck.HandCount} | Field: {opponent.Deck.FieldCount}";
+        }
+
+        private void OnDestroy()
+        {
+            if (turnManager != null)
+            {
+                turnManager.OnTurnStart -= HandleTurnStart;
+                turnManager.OnTurnEnd -= HandleTurnEnd;
+            }
+        }
     }
 }

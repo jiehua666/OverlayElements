@@ -1,66 +1,70 @@
-// Game HUD - In-game user interface
+// Game HUD - Displays game state information
 // Version: 0.1.0
 // Created: 2026-03-20
 
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using OverlayElements.Card;
 using OverlayElements.Game;
 
 namespace OverlayElements.UI
 {
     /// <summary>
-    /// Game HUD - manages all in-game UI elements
+    /// Game HUD controller
     /// </summary>
     public class GameHUD : MonoBehaviour
     {
         [Header("Player Info")]
         [SerializeField] private TextMeshProUGUI playerHealthText;
         [SerializeField] private TextMeshProUGUI playerEnergyText;
+        [SerializeField] private TextMeshProUGUI playerHandCountText;
+
+        [Header("Opponent Info")]
         [SerializeField] private TextMeshProUGUI opponentHealthText;
-        [SerializeField] private TextMeshProUGUI opponentEnergyText;
-        [SerializeField] private TextMeshProUGUI turnText;
-        [SerializeField] private TextMeshProUGUI deckCountText;
+        [SerializeField] private TextMeshProUGUI opponentHandCountText;
 
-        [Header("Card Areas")]
-        [SerializeField] private Transform handArea;
-        [SerializeField] private Transform playerFieldArea;
-        [SerializeField] private Transform opponentFieldArea;
-        [SerializeField] private GameObject cardPrefab;
+        [Header("Game Info")]
+        [SerializeField] private TextMeshProUGUI turnIndicatorText;
+        [SerializeField] private TextMeshProUGUI gameInfoText;
 
-        [Header("Buttons")]
+        [Header("Controls")]
         [SerializeField] private Button endTurnButton;
-        [SerializeField] private Button menuButton;
+        [SerializeField] private Button returnToMenuButton;
 
-        [Header("Info Panels")]
-        [SerializeField] private GameObject turnIndicator;
-        [SerializeField] private TextMeshProUGUI phaseText;
+        [Header("Debug")]
+        [SerializeField] private bool showDebugInfo = true;
 
-        // References
         private GameManager gameManager;
-        private List<CardUI> handCards = new List<CardUI>();
-        private List<CardUI> playerFieldCards = new List<CardUI>();
-        private List<CardUI> opponentFieldCards = new List<CardUI>();
 
         private void Start()
         {
-            gameManager = GameManager.Instance;
-            
-            if (gameManager != null)
+            // Find game manager
+            gameManager = FindObjectOfType<GameManager>();
+
+            if (gameManager == null)
             {
-                // Subscribe to events
-                gameManager.OnGameStateChanged += OnGameStateChanged;
-                gameManager.OnTurnStarted += OnTurnStarted;
-                gameManager.OnPlayerWon += OnPlayerWon;
+                Debug.LogError("[GameHUD] GameManager not found!");
+                return;
             }
 
-            // Button events
-            endTurnButton?.onClick.AddListener(OnEndTurnClicked);
-            menuButton?.onClick.AddListener(OnMenuClicked);
+            // Subscribe to events
+            gameManager.OnGameStateChanged += OnGameStateChanged;
+            gameManager.OnGameOver += OnGameOver;
+            
+            if (gameManager.Player != null)
+            {
+                gameManager.Player.OnHealthChanged += OnPlayerHealthChanged;
+                gameManager.Player.OnEnergyChanged += OnPlayerEnergyChanged;
+            }
 
-            // Initial state
+            // Button listeners
+            if (endTurnButton != null)
+                endTurnButton.onClick.AddListener(OnEndTurn);
+            
+            if (returnToMenuButton != null)
+                returnToMenuButton.onClick.AddListener(OnReturnToMenu);
+
+            // Initial update
             UpdateUI();
         }
 
@@ -69,8 +73,21 @@ namespace OverlayElements.UI
             if (gameManager != null)
             {
                 gameManager.OnGameStateChanged -= OnGameStateChanged;
-                gameManager.OnTurnStarted -= OnTurnStarted;
-                gameManager.OnPlayerWon -= OnPlayerWon;
+                gameManager.OnGameOver -= OnGameOver;
+
+                if (gameManager.Player != null)
+                {
+                    gameManager.Player.OnHealthChanged -= OnPlayerHealthChanged;
+                    gameManager.Player.OnEnergyChanged -= OnPlayerEnergyChanged;
+                }
+            }
+        }
+
+        private void Update()
+        {
+            if (showDebugInfo && gameManager != null)
+            {
+                UpdateDebugInfo();
             }
         }
 
@@ -81,183 +98,126 @@ namespace OverlayElements.UI
         {
             if (gameManager == null) return;
 
-            var player = gameManager.CurrentPlayer;
-            var opponent = gameManager.OpponentPlayer;
+            var player = gameManager.Player;
+            var opponent = gameManager.Opponent;
 
-            // Player info
-            playerHealthText.text = $"{player.Health}/{player.MaxHealth}";
-            playerEnergyText.text = $"{player.Energy}/{player.MaxEnergy}";
-
-            // Opponent info
-            opponentHealthText.text = $"{opponent.Health}/{opponent.MaxHealth}";
-            opponentEnergyText.text = $"{opponent.Energy}/{opponent.MaxEnergy}";
-
-            // Turn info
-            turnText.text = $"Turn {gameManager.TurnNumber}";
-
-            // Deck count
-            deckCountText.text = $"Deck: {player.Deck.DrawPileCount}";
-
-            // Phase
-            phaseText.text = gameManager.CurrentState.ToString();
-
-            // Update card displays
-            UpdateHandCards();
-            UpdateFieldCards();
-        }
-
-        /// <summary>
-        /// Update hand cards display
-        /// </summary>
-        private void UpdateHandCards()
-        {
-            if (gameManager == null) return;
-
-            var player = gameManager.CurrentPlayer;
-
-            // Remove excess cards
-            while (handCards.Count > player.Deck.HandCount)
+            if (player != null)
             {
-                var card = handCards[handCards.Count - 1];
-                handCards.RemoveAt(handCards.Count - 1);
-                Destroy(card.gameObject);
+                if (playerHealthText != null)
+                    playerHealthText.text = $"HP: {player.Health}/{player.MaxHealth}";
+                
+                if (playerEnergyText != null)
+                    playerEnergyText.text = $"Energy: {player.Energy}/{player.MaxEnergy}";
+                
+                if (playerHandCountText != null)
+                    playerHandCountText.text = $"Hand: {player.Deck.HandCount}";
             }
 
-            // Add new cards
-            while (handCards.Count < player.Deck.HandCount)
+            if (opponent != null)
             {
-                var cardUI = CreateCardUI(handArea);
-                handCards.Add(cardUI);
+                if (opponentHealthText != null)
+                    opponentHealthText.text = $"HP: {opponent.Health}/{opponent.MaxHealth}";
+                
+                if (opponentHandCountText != null)
+                    opponentHandCountText.text = $"Hand: {opponent.Deck.HandCount}";
             }
 
-            // Update card data
-            for (int i = 0; i < handCards.Count; i++)
+            // Turn indicator
+            if (turnIndicatorText != null)
             {
-                var cardInstance = player.Deck.Hand[i];
-                handCards[i].SetCard(cardInstance);
-                handCards[i].gameObject.SetActive(true);
+                turnIndicatorText.text = gameManager.CurrentState switch
+                {
+                    GameState.PlayerTurn => "YOUR TURN",
+                    GameState.OpponentTurn => "OPPONENT'S TURN",
+                    GameState.Animating => "...",
+                    GameState.GameOver => "GAME OVER",
+                    _ => "WAITING"
+                };
+            }
+
+            // End turn button state
+            if (endTurnButton != null)
+            {
+                endTurnButton.interactable = gameManager.CurrentState == GameState.PlayerTurn;
             }
         }
 
         /// <summary>
-        /// Update field cards display
+        /// Update debug info
         /// </summary>
-        private void UpdateFieldCards()
+        private void UpdateDebugInfo()
         {
-            if (gameManager == null) return;
-
-            var player = gameManager.CurrentPlayer;
-            var opponent = gameManager.OpponentPlayer;
-
-            // Player field
-            UpdateFieldArea(playerFieldCards, player.Deck.Field, playerFieldArea);
-
-            // Opponent field (hide card details)
-            UpdateFieldArea(opponentFieldCards, opponent.Deck.Field, opponentFieldArea);
-        }
-
-        private void UpdateFieldArea(List<CardUI> cardList, IReadOnlyList<CardInstance> instances, Transform area)
-        {
-            // Remove excess
-            while (cardList.Count > instances.Count)
+            if (gameInfoText != null && gameManager != null)
             {
-                var card = cardList[cardList.Count - 1];
-                cardList.RemoveAt(cardList.Count - 1);
-                Destroy(card.gameObject);
-            }
-
-            // Add new
-            while (cardList.Count < instances.Count)
-            {
-                var cardUI = CreateCardUI(area);
-                cardList.Add(cardUI);
-            }
-
-            // Update
-            for (int i = 0; i < cardList.Count; i++)
-            {
-                cardList[i].SetCard(instances[i]);
-                cardList[i].UpdateDisplay();
+                gameInfoText.text = gameManager.GetGameInfo();
             }
         }
 
         /// <summary>
-        /// Create a card UI element
+        /// On game state changed
         /// </summary>
-        private CardUI CreateCardUI(Transform parent)
+        private void OnGameStateChanged(GameState newState)
         {
-            var go = Instantiate(cardPrefab, parent);
-            go.transform.localScale = Vector3.one;
-            return go.GetComponent<CardUI>();
+            UpdateUI();
         }
 
-        // === Event Handlers ===
+        /// <summary>
+        /// On player health changed
+        /// </summary>
+        private void OnPlayerHealthChanged(int newHealth)
+        {
+            UpdateUI();
+        }
 
-        private void OnGameStateChanged(GameState state)
+        /// <summary>
+        /// On player energy changed
+        /// </summary>
+        private void OnPlayerEnergyChanged(int newEnergy)
+        {
+            UpdateUI();
+        }
+
+        /// <summary>
+        /// On game over
+        /// </summary>
+        private void OnGameOver(Player winner)
         {
             UpdateUI();
             
-            if (state == GameState.GameOver)
+            if (turnIndicatorText != null)
             {
-                ShowGameOver();
+                string winnerName = winner == gameManager.Player ? "YOU WIN!" : "YOU LOSE!";
+                turnIndicatorText.text = winnerName;
             }
-        }
 
-        private void OnTurnStarted(int playerIndex)
-        {
-            UpdateUI();
-            ShowTurnIndicator(playerIndex == 0 ? "Your Turn" : "Enemy Turn");
-        }
-
-        private void OnPlayerWon(Player winner)
-        {
-            Debug.Log($"Player won: {winner.Name}");
-        }
-
-        private void OnEndTurnClicked()
-        {
-            gameManager?.EndTurn();
-        }
-
-        private void OnMenuClicked()
-        {
-            // Show pause menu
-            Time.timeScale = 0;
+            Debug.Log($"[GameHUD] {winnerName}");
         }
 
         /// <summary>
-        /// Show turn indicator
+        /// End turn button clicked
         /// </summary>
-        private void ShowTurnIndicator(string message)
+        private void OnEndTurn()
         {
-            if (turnIndicator != null)
+            if (gameManager != null)
             {
-                turnIndicator.SetActive(true);
-                var text = turnIndicator.GetComponentInChildren<TextMeshProUGUI>();
-                if (text != null)
-                {
-                    text.text = message;
-                }
-                // Auto hide after 2 seconds
-                Invoke(nameof(HideTurnIndicator), 2f);
-            }
-        }
-
-        private void HideTurnIndicator()
-        {
-            if (turnIndicator != null)
-            {
-                turnIndicator.SetActive(false);
+                gameManager.EndTurn();
             }
         }
 
         /// <summary>
-        /// Show game over screen
+        /// Return to menu
         /// </summary>
-        private void ShowGameOver()
+        private void OnReturnToMenu()
         {
-            // TODO: Show game over panel
-            Debug.Log("Game Over!");
+            var loader = Core.GameSceneLoader.Instance;
+            if (loader != null)
+            {
+                loader.LoadMainMenu();
+            }
+            else
+            {
+                UnityEngine.SceneManagement.SceneManager.LoadScene("MainMenu");
+            }
         }
     }
 }

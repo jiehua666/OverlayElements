@@ -5,7 +5,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using OverlayElements.Game;
+using OverlayElements.Core;
 
 namespace OverlayElements.UI
 {
@@ -20,20 +20,26 @@ namespace OverlayElements.UI
         [SerializeField] private Button settingsButton;
         [SerializeField] private Button quitButton;
 
-        [Header("Panels")]
-        [SerializeField] private GameObject mainMenuPanel;
-        [SerializeField] private GameObject gameHUDPrefab;
-
         [Header("Version Info")]
         [SerializeField] private TextMeshProUGUI versionText;
+
+        [Header("Settings")]
+        [SerializeField] private bool useSceneLoading = true;
 
         private void Start()
         {
             // Button listeners
-            startGameButton?.onClick.AddListener(OnStartGame);
-            deckEditorButton?.onClick.AddListener(OnDeckEditor);
-            settingsButton?.onClick.AddListener(OnSettings);
-            quitButton?.onClick.AddListener(OnQuit);
+            if (startGameButton != null)
+                startGameButton.onClick.AddListener(OnStartGame);
+            
+            if (deckEditorButton != null)
+                deckEditorButton.onClick.AddListener(OnDeckEditor);
+            
+            if (settingsButton != null)
+                settingsButton.onClick.AddListener(OnSettings);
+            
+            if (quitButton != null)
+                quitButton.onClick.AddListener(OnQuit);
 
             // Version
             if (versionText != null)
@@ -49,21 +55,24 @@ namespace OverlayElements.UI
         {
             Debug.Log("[MainMenu] Starting game...");
 
-            // Hide main menu
-            if (mainMenuPanel != null)
+            if (useSceneLoading)
             {
-                mainMenuPanel.SetActive(false);
+                // Load Game scene
+                var loader = GameSceneLoader.Instance;
+                if (loader != null)
+                {
+                    loader.LoadGameScene();
+                }
+                else
+                {
+                    Debug.LogError("[MainMenu] GameSceneLoader not found!");
+                }
             }
-
-            // Show game HUD
-            if (gameHUDPrefab != null)
+            else
             {
-                Instantiate(gameHUDPrefab);
+                // Legacy mode: Just show a debug message
+                Debug.Log("[MainMenu] Game would start here. Use scene loading for full experience.");
             }
-
-            // Start game
-            var gameManager = FindObjectOfType<GameManager>();
-            gameManager?.StartGame();
         }
 
         /// <summary>
@@ -71,7 +80,7 @@ namespace OverlayElements.UI
         /// </summary>
         private void OnDeckEditor()
         {
-            Debug.Log("[MainMenu] Deck Editor - Not implemented yet");
+            Debug.Log("[MainMenu] Deck Editor - Coming soon!");
             // TODO: Implement deck editor
         }
 
@@ -80,7 +89,7 @@ namespace OverlayElements.UI
         /// </summary>
         private void OnSettings()
         {
-            Debug.Log("[MainMenu] Settings - Not implemented yet");
+            Debug.Log("[MainMenu] Settings - Coming soon!");
             // TODO: Implement settings
         }
 
@@ -89,12 +98,20 @@ namespace OverlayElements.UI
         /// </summary>
         private void OnQuit()
         {
-            Debug.Log("[MainMenu] Quitting...");
-            Application.Quit();
+            var loader = GameSceneLoader.Instance;
+            if (loader != null)
+            {
+                loader.QuitGame();
+            }
+            else
+            {
+                Debug.Log("[MainMenu] Quitting...");
+                Application.Quit();
 
-#if UNITY_EDITOR
-            UnityEditor.EditorApplication.isPlaying = false;
-#endif
+                #if UNITY_EDITOR
+                UnityEditor.EditorApplication.isPlaying = false;
+                #endif
+            }
         }
     }
 }
