@@ -46,9 +46,13 @@ x86/
 *.bak
 *.backup
 
-# LFS
-*.png
-*.jpg
+# LFS (Assets managed by Git LFS)
+# *.png
+# *.jpg
+
+# Exception: Card artwork (tracked by Git, not LFS)
+!03_美术资源/card_artwork/*.png
+!03_美术资源/card_artwork/*.jpg
 *.jpeg
 *.psd
 *.aiff
