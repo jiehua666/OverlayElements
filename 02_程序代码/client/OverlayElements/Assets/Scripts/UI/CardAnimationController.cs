@@ -142,11 +142,12 @@ namespace OverlayElements.UI
 
             // Scale down phase
             elapsed = 0f;
+            float startScaleVal = startScale.x * 1.3f;
             while (elapsed < destroyDuration * 2f / 3f)
             {
                 elapsed += Time.deltaTime;
                 float t = Mathf.Clamp01(elapsed / (destroyDuration * 2f / 3f));
-                float scale = Mathf.Lerp(startScale * 1.3f, Vector3.zero, EaseInBack(t)).x;
+                float scale = Mathf.Lerp(startScaleVal, 0f, EaseInBack(t));
                 cardUI.transform.localScale = Vector3.one * scale;
                 yield return null;
             }
