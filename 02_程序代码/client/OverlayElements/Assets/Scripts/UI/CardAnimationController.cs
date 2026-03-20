@@ -4,7 +4,6 @@
 
 using System.Collections;
 using UnityEngine;
-using DG.Tweening;
 
 namespace OverlayElements.UI
 {
@@ -19,24 +18,35 @@ namespace OverlayElements.UI
         [SerializeField] private float hoverDuration = 0.2f;
         [SerializeField] private float destroyDuration = 0.5f;
 
-        [Header("Easing")]
-        [SerializeField] private Ease playEase = Ease.OutBack;
-        [SerializeField] private Ease attackEase = Ease.InOutQuad;
-        [SerializeField] private Ease destroyEase = Ease.InBack;
-
         /// <summary>
         /// Animate card from hand to field
         /// </summary>
         public void AnimateCardPlay(CardUI cardUI, Vector3 targetPosition, System.Action onComplete = null)
         {
-            var sequence = DOTween.Sequence();
-            
-            sequence.Append(cardUI.transform.DOMove(targetPosition, cardPlayDuration)
-                .SetEase(playEase));
-            
-            sequence.Append(cardUI.transform.DOPunchScale(Vector3.one * 0.2f, 0.2f));
-            
-            sequence.OnComplete(() => onComplete?.Invoke());
+            StartCoroutine(AnimateCardPlayCoroutine(cardUI, targetPosition, onComplete));
+        }
+
+        private IEnumerator AnimateCardPlayCoroutine(CardUI cardUI, Vector3 targetPosition, System.Action onComplete)
+        {
+            Vector3 startPos = cardUI.transform.position;
+            Vector3 startScale = cardUI.transform.localScale;
+            float elapsed = 0f;
+
+            while (elapsed < cardPlayDuration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / cardPlayDuration);
+                float easeT = EaseOutBack(t);
+
+                cardUI.transform.position = Vector3.Lerp(startPos, targetPosition, easeT);
+                cardUI.transform.localScale = startScale * (1f + 0.2f * (1f - t));
+
+                yield return null;
+            }
+
+            cardUI.transform.position = targetPosition;
+            cardUI.transform.localScale = startScale;
+            onComplete?.Invoke();
         }
 
         /// <summary>
@@ -44,27 +54,42 @@ namespace OverlayElements.UI
         /// </summary>
         public void AnimateAttack(CardUI attackerUI, CardUI targetUI, System.Action onComplete = null)
         {
+            StartCoroutine(AnimateAttackCoroutine(attackerUI, targetUI, onComplete));
+        }
+
+        private IEnumerator AnimateAttackCoroutine(CardUI attackerUI, CardUI targetUI, System.Action onComplete)
+        {
             Vector3 originalPos = attackerUI.transform.position;
             Vector3 targetPos = targetUI.transform.position;
-            
-            var sequence = DOTween.Sequence();
-            
+            float halfDuration = attackDuration / 2f;
+
             // Move toward target
-            sequence.Append(attackerUI.transform.DOMove(targetPos, attackDuration / 2)
-                .SetEase(Ease.OutQuad));
-            
+            float elapsed = 0f;
+            while (elapsed < halfDuration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / halfDuration);
+                attackerUI.transform.position = Vector3.Lerp(originalPos, targetPos, EaseOutQuad(t));
+                yield return null;
+            }
+
+            // Impact effect
+            targetUI.transform.localPosition = Random.insideUnitCircle * 10f;
+            yield return new WaitForSeconds(0.05f);
+            targetUI.transform.localPosition = Vector3.zero;
+
             // Move back
-            sequence.Append(attackerUI.transform.DOMove(originalPos, attackDuration / 2)
-                .SetEase(Ease.InQuad));
-            
-            // Target shake effect
-            sequence.Insert(attackDuration / 2, targetUI.transform.DOPunchPosition(
-                Random.insideUnitCircle * 10f, 0.2f));
-            
-            // Scale effect on attacker
-            sequence.Insert(0, attackerUI.transform.DOPunchScale(Vector3.one * 0.1f, attackDuration));
-            
-            sequence.OnComplete(() => onComplete?.Invoke());
+            elapsed = 0f;
+            while (elapsed < halfDuration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / halfDuration);
+                attackerUI.transform.position = Vector3.Lerp(targetPos, originalPos, EaseInQuad(t));
+                yield return null;
+            }
+
+            attackerUI.transform.position = originalPos;
+            onComplete?.Invoke();
         }
 
         /// <summary>
@@ -72,16 +97,25 @@ namespace OverlayElements.UI
         /// </summary>
         public void AnimateHover(CardUI cardUI, bool isHovering)
         {
-            Vector3 targetScale = isHovering ? Vector3.one * 1.15f : Vector3.one;
-            Vector3 targetPos = isHovering ? 
-                cardUI.transform.position + Vector3.up * 30f : 
-                cardUI.transform.position - Vector3.up * 30f;
+            StopCoroutine("HoverCoroutine");
+            StartCoroutine(HoverCoroutine(cardUI, isHovering));
+        }
 
-            cardUI.transform.DOScale(targetScale, hoverDuration)
-                .SetEase(Ease.OutQuad);
-            
-            cardUI.transform.DOMove(targetPos, hoverDuration)
-                .SetEase(Ease.OutQuad);
+        private IEnumerator HoverCoroutine(CardUI cardUI, bool isHovering)
+        {
+            Vector3 startScale = cardUI.transform.localScale;
+            Vector3 targetScale = isHovering ? Vector3.one * 1.15f : Vector3.one;
+            float elapsed = 0f;
+
+            while (elapsed < hoverDuration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / hoverDuration);
+                cardUI.transform.localScale = Vector3.Lerp(startScale, targetScale, EaseOutQuad(t));
+                yield return null;
+            }
+
+            cardUI.transform.localScale = targetScale;
         }
 
         /// <summary>
@@ -89,18 +123,36 @@ namespace OverlayElements.UI
         /// </summary>
         public void AnimateDestroy(CardUI cardUI, System.Action onComplete = null)
         {
-            var sequence = DOTween.Sequence();
-            
-            sequence.Append(cardUI.transform.DOScale(Vector3.one * 1.3f, destroyDuration / 3)
-                .SetEase(Ease.OutQuad));
-            
-            sequence.Append(cardUI.transform.DOScale(Vector3.zero, destroyDuration * 2 / 3)
-                .SetEase(destroyEase));
-            
-            sequence.Join(cardUI.GetComponent<CanvasGroup>()?
-                .DOFade(0, destroyDuration));
-            
-            sequence.OnComplete(() => onComplete?.Invoke());
+            StartCoroutine(AnimateDestroyCoroutine(cardUI, onComplete));
+        }
+
+        private IEnumerator AnimateDestroyCoroutine(CardUI cardUI, System.Action onComplete)
+        {
+            Vector3 startScale = cardUI.transform.localScale;
+            float elapsed = 0f;
+
+            // Scale up phase
+            while (elapsed < destroyDuration / 3f)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / (destroyDuration / 3f));
+                cardUI.transform.localScale = startScale * (1f + 0.3f * t);
+                yield return null;
+            }
+
+            // Scale down phase
+            elapsed = 0f;
+            while (elapsed < destroyDuration * 2f / 3f)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / (destroyDuration * 2f / 3f));
+                float scale = Mathf.Lerp(startScale * 1.3f, Vector3.zero, EaseInBack(t)).x;
+                cardUI.transform.localScale = Vector3.one * scale;
+                yield return null;
+            }
+
+            cardUI.gameObject.SetActive(false);
+            onComplete?.Invoke();
         }
 
         /// <summary>
@@ -108,53 +160,90 @@ namespace OverlayElements.UI
         /// </summary>
         public void AnimateOverlay(CardUI baseCardUI, CardUI overlayCardUI, System.Action onComplete = null)
         {
-            Vector3 basePos = baseCardUI.transform.position;
-            
-            // Overlay card flies to base card
-            var sequence = DOTween.Sequence();
-            
-            sequence.Append(overlayCardUI.transform.DOMove(basePos, 0.3f)
-                .SetEase(Ease.InQuad));
-            
-            sequence.Join(overlayCardUI.transform.DOScale(Vector3.one * 0.5f, 0.3f));
-            
-            sequence.Append(baseCardUI.transform.DOPunchScale(Vector3.one * 0.3f, 0.2f));
-            
-            sequence.OnComplete(() =>
+            StartCoroutine(AnimateOverlayCoroutine(baseCardUI, overlayCardUI, onComplete));
+        }
+
+        private IEnumerator AnimateOverlayCoroutine(CardUI baseCardUI, CardUI overlayCardUI, System.Action onComplete)
+        {
+            Vector3 startPos = overlayCardUI.transform.position;
+            Vector3 startScale = overlayCardUI.transform.localScale;
+            Vector3 targetPos = baseCardUI.transform.position;
+            float elapsed = 0f;
+
+            while (elapsed < 0.3f)
             {
-                overlayCardUI.gameObject.SetActive(false);
-                onComplete?.Invoke();
-            });
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / 0.3f);
+                overlayCardUI.transform.position = Vector3.Lerp(startPos, targetPos, EaseInQuad(t));
+                overlayCardUI.transform.localScale = Vector3.Lerp(startScale, Vector3.one * 0.5f, t);
+                yield return null;
+            }
+
+            // Punch effect on base card
+            baseCardUI.transform.localScale = Vector3.one * 1.3f;
+            yield return new WaitForSeconds(0.1f);
+
+            elapsed = 0f;
+            while (elapsed < 0.2f)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / 0.2f);
+                baseCardUI.transform.localScale = Vector3.Lerp(Vector3.one * 1.3f, Vector3.one, EaseOutQuad(t));
+                yield return null;
+            }
+
+            overlayCardUI.gameObject.SetActive(false);
+            onComplete?.Invoke();
         }
 
         /// <summary>
-        /// Animate damage number
+        /// Show damage number
         /// </summary>
         public void ShowDamageNumber(Vector3 position, int damage, bool isHeal = false)
         {
+            StartCoroutine(ShowDamageNumberCoroutine(position, damage, isHeal));
+        }
+
+        private IEnumerator ShowDamageNumberCoroutine(Vector3 position, int damage, bool isHeal)
+        {
             GameObject damageText = new GameObject("DamageNumber");
             damageText.transform.position = position;
-            
+
             var textMesh = damageText.AddComponent<TMPro.TextMeshProUGUI>();
             textMesh.text = isHeal ? $"+{damage}" : $"-{damage}";
             textMesh.fontSize = 36;
             textMesh.color = isHeal ? Color.green : Color.red;
             textMesh.alignment = TMPro.TextAlignmentOptions.Center;
-            
+
             var canvas = damageText.AddComponent<Canvas>();
             canvas.sortingOrder = 100;
-            
-            var sequence = DOTween.Sequence();
-            sequence.Append(damageText.transform.DOMoveY(position.y + 50f, 0.8f)
-                .SetEase(Ease.OutQuad));
-            sequence.Join(textMesh.DOFade(0, 0.8f));
-            sequence.OnComplete(() => Destroy(damageText));
+
+            float elapsed = 0f;
+            float duration = 0.8f;
+
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / duration);
+
+                damageText.transform.position = position + Vector3.up * (50f * t);
+                textMesh.alpha = 1f - t;
+
+                yield return null;
+            }
+
+            Destroy(damageText);
         }
 
         /// <summary>
         /// Animate turn indicator
         /// </summary>
         public void AnimateTurnIndicator(GameObject indicator, string message, System.Action onComplete = null)
+        {
+            StartCoroutine(AnimateTurnIndicatorCoroutine(indicator, message, onComplete));
+        }
+
+        private IEnumerator AnimateTurnIndicatorCoroutine(GameObject indicator, string message, System.Action onComplete)
         {
             var text = indicator.GetComponentInChildren<TMPro.TextMeshProUGUI>();
             if (text != null)
@@ -163,62 +252,99 @@ namespace OverlayElements.UI
             }
 
             indicator.SetActive(true);
-            
-            var sequence = DOTween.Sequence();
-            
-            sequence.Append(indicator.transform.DOScale(Vector3.one * 1.2f, 0.3f)
-                .SetEase(Ease.OutQuad));
-            
-            sequence.Append(indicator.transform.DOScale(Vector3.one, 0.2f)
-                .SetEase(Ease.InQuad));
-            
-            sequence.AppendInterval(1.5f);
-            
-            sequence.Append(indicator.GetComponent<CanvasGroup>()?
-                .DOFade(0, 0.3f) ?? indicator.transform.DOScale(Vector3.zero, 0.3f));
-            
-            sequence.OnComplete(() =>
+            Vector3 startScale = indicator.transform.localScale;
+
+            // Scale up
+            float elapsed = 0f;
+            while (elapsed < 0.3f)
             {
-                indicator.SetActive(false);
-                onComplete?.Invoke();
-            });
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / 0.3f);
+                indicator.transform.localScale = startScale * (0.8f + 0.4f * EaseOutQuad(t));
+                yield return null;
+            }
+
+            // Scale down to normal
+            elapsed = 0f;
+            while (elapsed < 0.2f)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / 0.2f);
+                indicator.transform.localScale = Vector3.one * EaseInQuad(t);
+                yield return null;
+            }
+
+            // Hold
+            yield return new WaitForSeconds(1.5f);
+
+            // Fade out
+            var canvasGroup = indicator.GetComponent<CanvasGroup>();
+            if (canvasGroup == null)
+            {
+                canvasGroup = indicator.AddComponent<CanvasGroup>();
+            }
+
+            elapsed = 0f;
+            while (elapsed < 0.3f)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / 0.3f);
+                canvasGroup.alpha = 1f - t;
+                yield return null;
+            }
+
+            indicator.SetActive(false);
+            onComplete?.Invoke();
         }
 
         /// <summary>
         /// Animate element reaction effect
         /// </summary>
-        public void ShowElementReaction(ElementType element, Vector3 position)
+        public void ShowElementReaction(OverlayElements.Card.ElementType element, Vector3 position)
+        {
+            StartCoroutine(ShowElementReactionCoroutine(element, position));
+        }
+
+        private IEnumerator ShowElementReactionCoroutine(OverlayElements.Card.ElementType element, Vector3 position)
         {
             GameObject effect = new GameObject("ElementReaction");
             effect.transform.position = position;
-            
-            // Add particle-like effect based on element
+
             var sprite = effect.AddComponent<SpriteRenderer>();
-            sprite.sprite = CreateElementSprite(element);
+            sprite.sprite = CreateElementSprite();
             sprite.color = GetElementColor(element);
-            
-            var sequence = DOTween.Sequence();
-            sequence.Append(effect.transform.DOScale(Vector3.one * 2f, 0.5f)
-                .SetEase(Ease.OutQuad));
-            sequence.Join(effect.GetComponent<SpriteRenderer>().DOFade(0, 0.5f));
-            sequence.OnComplete(() => Destroy(effect));
+
+            float elapsed = 0f;
+            float duration = 0.5f;
+
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / duration);
+
+                effect.transform.localScale = Vector3.one * (1f + t);
+                sprite.color = new Color(sprite.color.r, sprite.color.g, sprite.color.b, 1f - t);
+
+                yield return null;
+            }
+
+            Destroy(effect);
         }
 
-        private Color GetElementColor(ElementType element)
+        private Color GetElementColor(OverlayElements.Card.ElementType element)
         {
             return element switch
             {
-                ElementType.Fire => new Color(1f, 0.3f, 0f),
-                ElementType.Water => new Color(0.2f, 0.5f, 1f),
-                ElementType.Wind => new Color(0.3f, 0.8f, 0.3f),
-                ElementType.Wood => new Color(0.6f, 0.4f, 0.2f),
+                OverlayElements.Card.ElementType.Fire => new Color(1f, 0.3f, 0f),
+                OverlayElements.Card.ElementType.Water => new Color(0.2f, 0.5f, 1f),
+                OverlayElements.Card.ElementType.Wind => new Color(0.3f, 0.8f, 0.3f),
+                OverlayElements.Card.ElementType.Wood => new Color(0.6f, 0.4f, 0.2f),
                 _ => Color.white
             };
         }
 
-        private Sprite CreateElementSprite(ElementType element)
+        private Sprite CreateElementSprite()
         {
-            // Create a simple circle sprite for now
             Texture2D tex = new Texture2D(64, 64);
             for (int x = 0; x < 64; x++)
             {
@@ -230,6 +356,22 @@ namespace OverlayElements.UI
             }
             tex.Apply();
             return Sprite.Create(tex, new Rect(0, 0, 64, 64), new Vector2(0.5f, 0.5f), 64);
+        }
+
+        // Easing functions
+        private float EaseOutQuad(float t) => 1f - (1f - t) * (1f - t);
+        private float EaseInQuad(float t) => t * t;
+        private float EaseOutBack(float t)
+        {
+            float c1 = 1.70158f;
+            float c3 = c1 + 1f;
+            return 1f + c3 * Mathf.Pow(t - 1f, 3f) + c1 * Mathf.Pow(t - 1f, 2f);
+        }
+        private float EaseInBack(float t)
+        {
+            float c1 = 1.70158f;
+            float c3 = c1 + 1f;
+            return c3 * t * t * t - c1 * t * t;
         }
     }
 }
