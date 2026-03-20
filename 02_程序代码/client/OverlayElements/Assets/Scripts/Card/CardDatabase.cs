@@ -47,6 +47,22 @@ namespace OverlayElements.Card
         }
 
         /// <summary>
+        /// Get card by ID (alias)
+        /// </summary>
+        public CardData GetCardById(string cardId)
+        {
+            return GetCard(cardId);
+        }
+
+        /// <summary>
+        /// Get all cards (alias for Cards property)
+        /// </summary>
+        public List<CardData> GetAllCards()
+        {
+            return new List<CardData>(cards);
+        }
+
+        /// <summary>
         /// Get cards by element
         /// </summary>
         public List<CardData> GetCardsByElement(ElementType element)

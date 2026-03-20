@@ -16,34 +16,67 @@ namespace OverlayElements.Game
     public class AIController
     {
         private Player aiPlayer;
+        private Player opponent;
         private CardDeck deck;
         private CombatManager combatManager;
+        private GameBoard board;
         private float thinkDelay = 1.5f;
+        private bool turnComplete = false;
+        private bool isRunning = false;
 
-        public AIController(Player aiPlayer, CombatManager combatManager)
+        public AIController(CombatManager combatManager, GameBoard board)
         {
-            this.aiPlayer = aiPlayer;
-            this.deck = aiPlayer.Deck;
             this.combatManager = combatManager;
+            this.board = board;
         }
 
         /// <summary>
-        /// Execute AI turn
+        /// Initialize with players
         /// </summary>
-        public IEnumerator ExecuteTurn(Action onComplete)
+        public void Initialize(Player aiPlayer, Player opponent)
         {
-            Debug.Log("[AI] Starting turn");
+            this.aiPlayer = aiPlayer;
+            this.opponent = opponent;
+            this.deck = aiPlayer.Deck;
+        }
+
+        /// <summary>
+        /// Is AI turn complete?
+        /// </summary>
+        public bool IsTurnComplete()
+        {
+            return turnComplete;
+        }
+
+        /// <summary>
+        /// Execute AI turn (called each frame)
+        /// Returns true if still processing
+        /// </summary>
+        public bool TakeTurn(Player ai, Player opponent)
+        {
+            if (isRunning) return true;
             
-            // Wait a bit before acting
+            // This method is called each frame to check if we should continue
+            // The actual logic runs via StartAITurn coroutine
+            return false;
+        }
+
+        /// <summary>
+        /// Start AI turn (returns coroutine)
+        /// </summary>
+        public IEnumerator StartAITurn()
+        {
+            isRunning = true;
+            turnComplete = false;
+
+            Debug.Log("[AI] Starting turn");
+
+            // Wait before acting
             yield return new WaitForSeconds(thinkDelay);
 
-            // Draw phase (handled by Player class)
-            yield return new WaitForSeconds(0.5f);
-
             // Main phase - AI decisions
-            while (ShouldContinuePlaying())
+            while (ShouldContinuePlaying() && aiPlayer.Energy > 0)
             {
-                // Try to play a card
                 if (!TryPlayBestCard())
                 {
                     break;
@@ -55,8 +88,9 @@ namespace OverlayElements.Game
             yield return ExecuteAttacks();
 
             // End turn
+            turnComplete = true;
+            isRunning = false;
             Debug.Log("[AI] Ending turn");
-            onComplete?.Invoke();
         }
 
         /// <summary>
@@ -64,6 +98,8 @@ namespace OverlayElements.Game
         /// </summary>
         private bool ShouldContinuePlaying()
         {
+            if (aiPlayer == null || deck == null) return false;
+            
             // Check if AI has playable cards
             foreach (var card in deck.Hand)
             {
@@ -80,6 +116,8 @@ namespace OverlayElements.Game
         /// </summary>
         private bool TryPlayBestCard()
         {
+            if (aiPlayer == null || deck == null) return false;
+            
             CardInstance bestCard = null;
             int bestScore = -1;
 
@@ -87,7 +125,7 @@ namespace OverlayElements.Game
             foreach (var card in deck.Hand)
             {
                 if (aiPlayer.Energy < card.Cost) continue;
-                
+
                 int score = EvaluateCardPlay(card);
                 if (score > bestScore)
                 {
@@ -98,9 +136,14 @@ namespace OverlayElements.Game
 
             if (bestCard != null && bestScore > 0)
             {
-                aiPlayer.PlayCard(bestCard);
-                Debug.Log($"[AI] Played: {bestCard.CardName}");
-                return true;
+                // Place on board
+                if (board != null && board.CanPlaceCard(false))
+                {
+                    board.PlaceCard(bestCard, false);
+                    deck.PlayCard(bestCard);
+                    Debug.Log($"[AI] Played: {bestCard.CardName}");
+                    return true;
+                }
             }
 
             return false;
@@ -126,15 +169,18 @@ namespace OverlayElements.Game
             }
 
             // Element synergy (prefer same element)
-            int sameElement = 0;
-            foreach (var fieldCard in deck.Field)
+            if (deck != null)
             {
-                if (fieldCard.Element == card.Element)
+                int sameElement = 0;
+                foreach (var fieldCard in deck.Field)
                 {
-                    sameElement++;
+                    if (fieldCard.Element == card.Element)
+                    {
+                        sameElement++;
+                    }
                 }
+                score += sameElement * 3;
             }
-            score += sameElement * 3;
 
             return score;
         }
@@ -144,6 +190,8 @@ namespace OverlayElements.Game
         /// </summary>
         private IEnumerator ExecuteAttacks()
         {
+            if (deck == null || combatManager == null) yield break;
+
             yield return new WaitForSeconds(0.5f);
 
             foreach (var attacker in deck.Field)

@@ -161,20 +161,20 @@ namespace OverlayElements.Audio
         /// <summary>
         /// Play element sound
         /// </summary>
-        public void PlayElementSound(Card.ElementType element)
+        public void PlayElementSound(OverlayElements.Card.ElementType element)
         {
             switch (element)
             {
-                case Card.ElementType.Fire:
+                case OverlayElements.Card.ElementType.Fire:
                     PlaySFX(fireSFX);
                     break;
-                case Card.ElementType.Water:
+                case OverlayElements.Card.ElementType.Water:
                     PlaySFX(waterSFX);
                     break;
-                case Card.ElementType.Wind:
+                case OverlayElements.Card.ElementType.Wind:
                     PlaySFX(windSFX);
                     break;
-                case Card.ElementType.Wood:
+                case OverlayElements.Card.ElementType.Wood:
                     PlaySFX(woodSFX);
                     break;
             }

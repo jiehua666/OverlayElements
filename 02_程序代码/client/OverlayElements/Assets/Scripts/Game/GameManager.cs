@@ -107,6 +107,9 @@ namespace OverlayElements.Game
             player = new Player("Player", playerStartingHealth, 3);
             opponent = new Player("Opponent", opponentStartingHealth, 3);
 
+            // Initialize AI with players
+            aiController.Initialize(opponent, player);
+
             // Create decks
             if (useTestDeck && cardDatabase != null)
             {
@@ -202,7 +205,7 @@ namespace OverlayElements.Game
             opponent.DrawCards(initialHandSize);
 
             // Start first turn
-            turnManager.StartGame();
+            turnManager.StartTurn();
             SetGameState(GameState.PlayerTurn);
 
             Debug.Log("[GameManager] Game Started!");
@@ -223,8 +226,10 @@ namespace OverlayElements.Game
         /// <summary>
         /// Handle turn start
         /// </summary>
-        private void HandleTurnStart(bool isPlayerTurn)
+        private void HandleTurnStart(TurnPhase phase)
         {
+            bool isPlayerTurn = phase == TurnPhase.Main;
+            
             if (isPlayerTurn)
             {
                 SetGameState(GameState.PlayerTurn);
@@ -247,11 +252,8 @@ namespace OverlayElements.Game
         {
             yield return new WaitForSeconds(1f);
 
-            while (currentState == GameState.OpponentTurn && !aiController.IsTurnComplete())
-            {
-                aiController.TakeTurn(opponent, player);
-                yield return new WaitForSeconds(0.5f);
-            }
+            // Start AI turn and wait for completion
+            yield return StartCoroutine(aiController.StartAITurn());
 
             // End AI turn
             EndTurn();
@@ -260,15 +262,23 @@ namespace OverlayElements.Game
         /// <summary>
         /// Handle turn end
         /// </summary>
-        private void HandleTurnEnd(bool isPlayerTurn)
+        private void HandleTurnEnd()
         {
-            if (isPlayerTurn)
+            player.OnTurnEnd();
+            opponent.OnTurnEnd();
+            
+            // Check game over
+            CheckGameOver();
+            
+            // Start next turn if game not over
+            if (currentState != GameState.GameOver)
             {
-                player.OnTurnEnd();
-            }
-            else
-            {
-                opponent.OnTurnEnd();
+                // Alternate turns
+                bool nextIsPlayerTurn = currentState == GameState.OpponentTurn;
+                if (nextIsPlayerTurn)
+                {
+                    turnManager.StartTurn();
+                }
             }
         }
 
@@ -300,13 +310,13 @@ namespace OverlayElements.Game
         /// </summary>
         public void CheckGameOver()
         {
-            if (!player.IsAlive)
+            if (player != null && !player.IsAlive)
             {
                 SetGameState(GameState.GameOver);
                 OnGameOver?.Invoke(opponent);
                 Debug.Log("[GameManager] GAME OVER - Opponent Wins!");
             }
-            else if (!opponent.IsAlive)
+            else if (opponent != null && !opponent.IsAlive)
             {
                 SetGameState(GameState.GameOver);
                 OnGameOver?.Invoke(player);
@@ -319,6 +329,9 @@ namespace OverlayElements.Game
         /// </summary>
         public string GetGameInfo()
         {
+            if (player == null || opponent == null)
+                return "Game not initialized";
+
             return $"State: {currentState}\n" +
                    $"Player HP: {player.Health}/{player.MaxHealth} | Energy: {player.Energy}/{player.MaxEnergy}\n" +
                    $"Opponent HP: {opponent.Health}/{opponent.MaxHealth}\n" +
