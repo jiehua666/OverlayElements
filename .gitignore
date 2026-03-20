@@ -1,0 +1,62 @@
+# Unity
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.dll
+*.pdb
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.sln.docstates
+*.csproj.user
+
+# Unity specific
+*.csproj
+*.sln
+Assembly-CSharp.csproj
+Assembly-CSharp-firstpass.csproj
+*.unityproj
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+
+# Mac
+.DS_Store
+
+# Logs
+*.log
+
+# Backup
+*.bak
+*.backup
+
+# LFS
+*.png
+*.jpg
+*.jpeg
+*.psd
+*.aiff
+*.mp3
+*.wav
+*.ogg
+*.fbx
+*.obj
+*.mat
+*.prefab
+*.unity
